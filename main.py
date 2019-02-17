@@ -1,6 +1,35 @@
 
 
 
+def custom_replace(tensor, on_zero, on_non_zero):
+    # we create a copy of the original tensor, 
+    # because of the way we are replacing them.
+    res = tensor.clone()
+    res[tensor==0] = on_zero
+    res[tensor!=0] = on_non_zero
+    return res
+
+class Plot(object):
+    def __init__(self, title, port=8080):
+        self.viz = Visdom(port=port)
+        self.windows = {}
+        self.title = title
+
+    def register_scatterplot(self, name, xlabel, ylabel):
+        win = self.viz.scatter(
+            X=numpy.zeros((1, 2)),
+            opts=dict(title=self.title, markersize=5, xlabel=xlabel, ylabel=ylabel)
+        )
+        self.windows[name] = win
+
+    def update_scatterplot(self, name, x, y):
+        self.viz.updateTrace(
+            X=numpy.array([x]),
+            Y=numpy.array([y]),
+            win=self.windows[name]
+        )
+
+
 def main():
     import copy
     import glob
@@ -26,12 +55,48 @@ def main():
     from model import Policy
     from storage import RolloutStorage
     from utils import update_current_obs, eval_episode
+    from torchvision import transforms
+    from visdom import Visdom
 
     import algo
+
+    viz = Visdom(port=8097)
 
     print("#######")
     print("WARNING: All rewards are clipped or normalized so you need to use a monitor (see envs.py) or visdom plot to get true rewards")
     print("#######")
+
+    plot_rewards = [0]
+    x = np.array([0])
+    y = np.array([0])
+    counter = 0
+    win = viz.line(
+        X=x,
+        Y=y,
+        win="test1",
+        name='Line1',
+        opts=dict(
+            title='Reward',
+        )
+        )
+    win2 = viz.line(
+        X=x,
+        Y=y,
+        win="test2",
+        name='Line2',
+        opts=dict(
+            title='Policy Loss',
+        )
+        )
+    win3 = viz.line(
+        X=x,
+        Y=y,
+        win="test3",
+        name='Line3',
+        opts=dict(
+            title='Value Loss',
+        )
+        )
 
     args = get_args()
     if args.no_cuda:
@@ -174,6 +239,13 @@ def main():
 
             update_current_obs(obs, current_obs, obs_shape, args.num_stack)
             rollouts.insert(current_obs, states, action, action_log_prob, value, reward, masks)
+            # display_state = envs.curr_img
+            # display_state[:, envs.pos[0]:envs.pos[0]+envs.window, envs.pos[1]:envs.pos[1]+envs.window] = 5
+            # display_state = custom_replace(display_state, 1, 0)
+            # display_state[:, envs.pos[0]:envs.pos[0]+envs.window, envs.pos[1]:envs.pos[1]+envs.window] = \
+            #     envs.curr_img[:, envs.pos[0]:envs.pos[0]+envs.window, envs.pos[1]:envs.pos[1]+envs.window]
+            # img = transforms.ToPILImage()(display_state)
+            # img.save("state"+str(j)+"_"+str(step)+".png")
 
         with torch.no_grad():
             next_value = actor_critic.get_value(rollouts.observations[-1],
@@ -186,6 +258,8 @@ def main():
 
         rollouts.after_update()
 
+        
+
         if j % args.save_interval == 0:
             torch.save((actor_critic.state_dict(), results_dict), os.path.join(
                 model_dir, name + 'model.pt'))
@@ -193,6 +267,9 @@ def main():
         if j % args.log_interval == 0:
             end = time.time()
             total_reward = eval_episode(eval_env, actor_critic, args)
+
+            
+
             results_dict['rewards'].append(total_reward)
             total_num_steps = (j + 1) * args.num_processes * args.num_steps
             print("Updates {}, num timesteps {}, FPS {}, reward {:.1f} entropy {:.5f}, value loss {:.5f}, policy loss {:.5f}".
@@ -200,6 +277,50 @@ def main():
                        int(total_num_steps / (end - start)),
                        np.mean(results_dict['rewards'][-10:]), dist_entropy,
                        value_loss, action_loss))
+
+            # viz.scatter(
+            #     X=(np.linspace(len(results_dict['rewards']),2)),
+            #     Y=results_dict['rewards'],
+            #     opts=dict(
+            #         legend=['Reward'],
+            #         xtickmin=0,
+            #         xtickmax=len(results_dict['rewards']),
+            #         xtickstep=1,
+            #         ytickmin=min(results_dict['rewards']),
+            #         ytickmax=max(results_dict['rewards']),
+            #         ytickstep=0.05,
+            #     ),
+            # )
+            plot_rewards.append(np.mean(results_dict['rewards'][-10:]))
+            # x = range(len(plot_rewards))
+            # y = plot_rewards
+            # viz.update(x, y)
+            viz.line(
+                X=np.array([counter + 1]),
+                Y=np.array([np.mean(results_dict['rewards'][-10:])]),
+                win="test1",
+                name='Line1',
+                update='append',
+
+            )
+            viz.line(
+                X=np.array([counter + 1]),
+                Y=np.array([value_loss]),
+                win="test2",
+                name='Line2',
+                update='append',
+
+            )
+            viz.line(
+                X=np.array([counter + 1]),
+                Y=np.array([action_loss]),
+                win="test3",
+                name='Line3',
+                update='append',
+
+
+            )
+            counter = counter + 1
 
 
 if __name__ == "__main__":
