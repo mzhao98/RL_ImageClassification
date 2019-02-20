@@ -70,33 +70,33 @@ def main():
     x = np.array([0])
     y = np.array([0])
     counter = 0
-    win = viz.line(
-        X=x,
-        Y=y,
-        win="test1",
-        name='Line1',
-        opts=dict(
-            title='Reward',
-        )
-        )
-    win2 = viz.line(
-        X=x,
-        Y=y,
-        win="test2",
-        name='Line2',
-        opts=dict(
-            title='Policy Loss',
-        )
-        )
-    win3 = viz.line(
-        X=x,
-        Y=y,
-        win="test3",
-        name='Line3',
-        opts=dict(
-            title='Value Loss',
-        )
-        )
+    # win = viz.line(
+    #     X=x,
+    #     Y=y,
+    #     win="test1",
+    #     name='Line1',
+    #     opts=dict(
+    #         title='Reward',
+    #     )
+    #     )
+    # win2 = viz.line(
+    #     X=x,
+    #     Y=y,
+    #     win="test2",
+    #     name='Line2',
+    #     opts=dict(
+    #         title='Policy Loss',
+    #     )
+    #     )
+    # win3 = viz.line(
+    #     X=x,
+    #     Y=y,
+    #     win="test3",
+    #     name='Line3',
+    #     opts=dict(
+    #         title='Value Loss',
+    #     )
+    #     )
 
     args = get_args()
     if args.no_cuda:
@@ -135,9 +135,9 @@ def main():
         'args': args
     }
     torch.set_num_threads(1)
-    eval_env = make_env(args, 'mnist', args.seed, 1, None,
+    eval_env = make_env(args, 'cifar10', args.seed, 1, None,
             args.add_timestep, natural=args.nat, train=False)
-    envs = make_env(args, 'mnist', args.seed, 1, None,
+    envs = make_env(args, 'cifar10', args.seed, 1, None,
             args.add_timestep, natural=args.nat, train=True)
                 
     #print(envs)
@@ -262,7 +262,7 @@ def main():
 
         if j % args.save_interval == 0:
             torch.save((actor_critic.state_dict(), results_dict), os.path.join(
-                model_dir, name + 'model.pt'))
+                model_dir, name + 'cifar_model.pt'))
 
         if j % args.log_interval == 0:
             end = time.time()
@@ -295,32 +295,33 @@ def main():
             # x = range(len(plot_rewards))
             # y = plot_rewards
             # viz.update(x, y)
-            viz.line(
-                X=np.array([counter + 1]),
-                Y=np.array([np.mean(results_dict['rewards'][-10:])]),
-                win="test1",
-                name='Line1',
-                update='append',
 
-            )
-            viz.line(
-                X=np.array([counter + 1]),
-                Y=np.array([value_loss]),
-                win="test2",
-                name='Line2',
-                update='append',
+            # viz.line(
+            #     X=np.array([counter + 1]),
+            #     Y=np.array([np.mean(results_dict['rewards'][-10:])]),
+            #     win="test1",
+            #     name='Line1',
+            #     update='append',
 
-            )
-            viz.line(
-                X=np.array([counter + 1]),
-                Y=np.array([action_loss]),
-                win="test3",
-                name='Line3',
-                update='append',
+            # )
+            # viz.line(
+            #     X=np.array([counter + 1]),
+            #     Y=np.array([value_loss]),
+            #     win="test2",
+            #     name='Line2',
+            #     update='append',
+
+            # )
+            # viz.line(
+            #     X=np.array([counter + 1]),
+            #     Y=np.array([action_loss]),
+            #     win="test3",
+            #     name='Line3',
+            #     update='append',
 
 
-            )
-            counter = counter + 1
+            # )
+            # counter = counter + 1
 
 
 if __name__ == "__main__":
