@@ -239,13 +239,14 @@ def main():
 
             update_current_obs(obs, current_obs, obs_shape, args.num_stack)
             rollouts.insert(current_obs, states, action, action_log_prob, value, reward, masks)
-            # display_state = envs.curr_img
-            # display_state[:, envs.pos[0]:envs.pos[0]+envs.window, envs.pos[1]:envs.pos[1]+envs.window] = 5
-            # display_state = custom_replace(display_state, 1, 0)
-            # display_state[:, envs.pos[0]:envs.pos[0]+envs.window, envs.pos[1]:envs.pos[1]+envs.window] = \
-            #     envs.curr_img[:, envs.pos[0]:envs.pos[0]+envs.window, envs.pos[1]:envs.pos[1]+envs.window]
-            # img = transforms.ToPILImage()(display_state)
-            # img.save("state"+str(j)+"_"+str(step)+".png")
+
+            display_state = envs.curr_img
+            display_state[:, envs.pos[0]:envs.pos[0]+envs.window, envs.pos[1]:envs.pos[1]+envs.window] = 5
+            display_state = custom_replace(display_state, 1, 0)
+            display_state[:, envs.pos[0]:envs.pos[0]+envs.window, envs.pos[1]:envs.pos[1]+envs.window] = \
+                envs.curr_img[:, envs.pos[0]:envs.pos[0]+envs.window, envs.pos[1]:envs.pos[1]+envs.window]
+            img = transforms.ToPILImage()(display_state)
+            img.save("state_cifar/"+"state"+str(j)+"_"+str(step)+".png")
 
         with torch.no_grad():
             next_value = actor_critic.get_value(rollouts.observations[-1],
@@ -262,7 +263,7 @@ def main():
 
         if j % args.save_interval == 0:
             torch.save((actor_critic.state_dict(), results_dict), os.path.join(
-                model_dir, name + 'cifar_model.pt'))
+                model_dir, name + 'cifar_model1.pt'))
 
         if j % args.log_interval == 0:
             end = time.time()
