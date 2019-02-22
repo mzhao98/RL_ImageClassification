@@ -35,6 +35,7 @@ def main():
     import glob
     import os
     import time
+    import matplotlib.pyplot as plt
 
     import gym
     import numpy as np
@@ -66,10 +67,12 @@ def main():
     print("WARNING: All rewards are clipped or normalized so you need to use a monitor (see envs.py) or visdom plot to get true rewards")
     print("#######")
 
-    plot_rewards = [0]
-    x = np.array([0])
-    y = np.array([0])
-    counter = 0
+    plot_rewards = []
+    plot_policy_loss = []
+    plot_value_loss = []
+    # x = np.array([0])
+    # y = np.array([0])
+    # counter = 0
     # win = viz.line(
     #     X=x,
     #     Y=y,
@@ -201,6 +204,7 @@ def main():
 
     start = time.time()
     for j in range(num_updates):
+        envs.display_original(j)
         for step in range(args.num_steps):
             # Sample actions
             with torch.no_grad():
@@ -212,6 +216,8 @@ def main():
 
             # Obser reward and next obs
             obs, reward, done, info = envs.step(cpu_actions)
+
+            envs.display_step(step, j)
 
             # print("OBS", obs)
 
@@ -240,13 +246,14 @@ def main():
             update_current_obs(obs, current_obs, obs_shape, args.num_stack)
             rollouts.insert(current_obs, states, action, action_log_prob, value, reward, masks)
 
-            display_state = envs.curr_img
-            display_state[:, envs.pos[0]:envs.pos[0]+envs.window, envs.pos[1]:envs.pos[1]+envs.window] = 5
-            display_state = custom_replace(display_state, 1, 0)
-            display_state[:, envs.pos[0]:envs.pos[0]+envs.window, envs.pos[1]:envs.pos[1]+envs.window] = \
-                envs.curr_img[:, envs.pos[0]:envs.pos[0]+envs.window, envs.pos[1]:envs.pos[1]+envs.window]
-            img = transforms.ToPILImage()(display_state)
-            img.save("state_cifar/"+"state"+str(j)+"_"+str(step)+".png")
+            # print("envs.curr_img SHAPE: ", envs.curr_img.shape)
+            #display_state = envs.curr_img
+            # display_state[:, envs.pos[0]:envs.pos[0]+envs.window, envs.pos[1]:envs.pos[1]+envs.window] = 5
+            # display_state = custom_replace(display_state, 1, 0)
+            # display_state[:, envs.pos[0]:envs.pos[0]+envs.window, envs.pos[1]:envs.pos[1]+envs.window] = \
+            #     envs.curr_img[:, envs.pos[0]:envs.pos[0]+envs.window, envs.pos[1]:envs.pos[1]+envs.window]
+            # img = transforms.ToPILImage()(display_state)
+            # img.save("state_cifar/"+"state"+str(j)+"_"+str(step)+".png")
 
         with torch.no_grad():
             next_value = actor_critic.get_value(rollouts.observations[-1],
@@ -263,7 +270,7 @@ def main():
 
         if j % args.save_interval == 0:
             torch.save((actor_critic.state_dict(), results_dict), os.path.join(
-                model_dir, name + 'cifar_model1.pt'))
+                model_dir, name + 'cifar_model2.pt'))
 
         if j % args.log_interval == 0:
             end = time.time()
@@ -293,6 +300,16 @@ def main():
             #     ),
             # )
             plot_rewards.append(np.mean(results_dict['rewards'][-10:]))
+            plt.plot(range(len(plot_rewards)), plot_rewards)
+            plt.savefig("rewards.png")
+
+            plot_policy_loss.append(action_loss)
+            plt.plot(range(len(plot_policy_loss)), plot_policy_loss)
+            plt.savefig("policyloss.png")
+
+            plot_value_loss.append(value_loss)
+            plt.plot(range(len(plot_value_loss)), plot_value_loss)
+            plt.savefig("valueloss.png")
             # x = range(len(plot_rewards))
             # y = plot_rewards
             # viz.update(x, y)

@@ -6,6 +6,7 @@ import torchvision.transforms as T
 from torchvision import datasets
 
 from cityscapes import Cityscapes
+from torchvision import transforms
 
 CITYSCAPE = '/datasets01/cityscapes/112817/gtFine'
 IMG_ENVS = ['mnist', 'cifar10', 'cifar100', 'imagenet']
@@ -13,9 +14,12 @@ IMG_ENVS = ['mnist', 'cifar10', 'cifar100', 'imagenet']
 
 def get_data_loader(env_id, train=True):
     kwargs = {'num_workers': 0, 'pin_memory': True}
-    transform = T.Compose(
-        [T.ToTensor(),
-         T.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+    # transform = T.Compose(
+    #     [T.ToTensor()])
+    # transform = T.Compose(
+    #     [T.ToTensor(),
+    #      T.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+    transform = T.Compose([T.ToTensor()])
     # print(env_id)
     if env_id in IMG_ENVS:
         if env_id == 'mnist':
@@ -65,15 +69,37 @@ class ImgEnv(object):
         self.data_loader = get_data_loader(dataset, train=train)
         self.window = window
         self.max_steps = max_steps
+        self.labels_list = ["airplane", "automobile", "bird", "cat", "deer", "dog", "frog", "horse", "ship", "truck"]
 
     def seed(self, seed):
         np.random.seed(seed)
+
+    def display_original(self, num_update):
+        img = transforms.ToPILImage()(self.curr_img)
+        img.save("state_cifar/"+"image_test_label_update_" + str(num_update) + "_"+str(self.labels_list[int(self.curr_label.item())])+"_original"+".png")
+
+
+
+    def display_step(self, step_number, num_update):
+        display_state = self.curr_img
+        for i in range(self.curr_img.shape[0]):
+            for j in range(self.curr_img.shape[1]):
+                for k in range(self.curr_img.shape[2]):
+                    if self.state[0][j][k] == 0:
+                        display_state[i][j][k] = 0
+
+        img = transforms.ToPILImage()(display_state)
+        img.save("state_cifar/"+"image_test_label_update_" + str(num_update) + "_"+str(self.labels_list[int(self.curr_label.item())])+"_step_"+str(step_number)+".png")
+
 
     def reset(self):
         self.curr_img, self.curr_label = next(iter(self.data_loader))
         self.curr_img = self.curr_img.squeeze(0)
         self.curr_label = self.curr_label.squeeze(0)
-
+        #print("IMAGE", self.curr_img.shape)
+        
+        #print("LABEL", self.curr_label.item())
+        
         # initialize position at center of image
         self.pos = [max(0, self.curr_img.shape[1]//2-self.window), max(0, self.curr_img.shape[2]//2-self.window)]
         self.state = -np.ones(
@@ -85,6 +111,8 @@ class ImgEnv(object):
             1:, self.pos[0]:self.pos[0]+self.window, self.pos[1]:self.pos[1]+self.window] = \
             self.curr_img[:, self.pos[0]:self.pos[0]+self.window, self.pos[1]:self.pos[1]+self.window]
         self.num_steps = 0
+
+        # print("LABEL", self.curr_label.item())
         return self.state
 
     def step(self, action):
@@ -200,6 +228,8 @@ class DetectionEnv(object):
         if self.check_done():
             done = True
             reward = 1
+            
+
         return self.state, reward, done, {}
 
     def check_done(self):
