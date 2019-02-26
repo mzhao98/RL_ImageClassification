@@ -204,7 +204,7 @@ def main():
 
     start = time.time()
     for j in range(num_updates):
-        envs.display_original(j)
+        # envs.display_original(j)
         for step in range(args.num_steps):
             # Sample actions
             with torch.no_grad():
@@ -217,7 +217,7 @@ def main():
             # Obser reward and next obs
             obs, reward, done, info = envs.step(cpu_actions)
 
-            envs.display_step(step, j)
+            # envs.display_step(step, j)
 
             # print("OBS", obs)
 
