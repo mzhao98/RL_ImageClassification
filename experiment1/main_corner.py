@@ -52,7 +52,7 @@ def main():
     from baselines.common.vec_env.subproc_vec_env import SubprocVecEnv
     from baselines.common.vec_env.vec_normalize import VecNormalize
     from envs import make_env
-    from img_env import ImgEnv, IMG_ENVS
+    from img_env_corner import ImgEnv, IMG_ENVS
     from model import Policy
     from storage import RolloutStorage
     from utils import update_current_obs, eval_episode
@@ -270,7 +270,7 @@ def main():
 
         if j % args.save_interval == 0:
             torch.save((actor_critic.state_dict(), results_dict), os.path.join(
-                model_dir, name + 'cifar_model_ppo_ex1_center.pt'))
+                model_dir, name + 'cifar_model_ppo_ex1_corner.pt'))
 
         if j % args.log_interval == 0:
             end = time.time()
@@ -293,17 +293,17 @@ def main():
 
 
     plt.plot(range(len(plot_rewards)), plot_rewards)
-    plt.savefig("rewards_center.png")
+    plt.savefig("rewards_corner.png")
     plt.close()
 
     
     plt.plot(range(len(plot_policy_loss)), plot_policy_loss)
-    plt.savefig("policyloss_center.png")
+    plt.savefig("policyloss_corner.png")
     plt.close()
 
     
     plt.plot(range(len(plot_value_loss)), plot_value_loss)
-    plt.savefig("valueloss_center.png")
+    plt.savefig("valueloss_corner.png")
     plt.close()
 
 
