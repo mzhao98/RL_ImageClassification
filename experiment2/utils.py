@@ -55,14 +55,14 @@ def agent1_eval_episode(env, agent1, args):
     obs_shape = env.observation_space.shape
     obs_shape = (obs_shape[0] * args.num_stack, *obs_shape[1:])
     current_obs = torch.zeros(1, *obs_shape)
-    done = False
+    done1 = False
     total_reward = 0
     states = torch.zeros(1, 512)
     if args.cuda:
         current_obs = current_obs.cuda()
         states = states.cuda()
         agent1.base.cuda()
-    while not done:
+    while not done1:
         # state = torch.from_numpy(obs).float().cuda()
         update_current_obs(obs, current_obs, obs_shape, args.num_stack)
         value1, action1, action_log_probs1, states1 = agent1.act(
@@ -82,18 +82,18 @@ def agent1_eval_episode(env, agent1, args):
 
 def agent2_eval_episode(env, agent2, args):
     agent2.base.eval()
-    obs = env.agent1_reset()
+    obs = env.agent2_reset()
     obs_shape = env.observation_space.shape
     obs_shape = (obs_shape[0] * args.num_stack, *obs_shape[1:])
     current_obs = torch.zeros(1, *obs_shape)
-    done = False
+    done2 = False
     total_reward = 0
     states = torch.zeros(1, 512)
     if args.cuda:
         current_obs = current_obs.cuda()
         states = states.cuda()
         agent2.base.cuda()
-    while not done:
+    while not done2:
         # state = torch.from_numpy(obs).float().cuda()
         update_current_obs(obs, current_obs, obs_shape, args.num_stack)
         value2, action2, action_log_probs2, states2 = agent2.act(
@@ -105,5 +105,5 @@ def agent2_eval_episode(env, agent2, args):
         obs2, reward2, done2, _ = env.agent2_step(action2.detach().cpu().numpy())
         # obs2, reward2, done2, _ = env.agent2_step(action2.detach().cpu().numpy())
         #print("REWARD", reward)
-        total_reward += reward1
+        total_reward += reward2
     return total_reward

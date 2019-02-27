@@ -227,8 +227,10 @@ def main():
 
     start = time.time()
     for j in range(num_updates):
+        #print("NEW J ITERATION: ", j)
         # envs.display_original(j)
         for step in range(args.num_steps):
+            #uprint("STEP", step)
             # Sample actions
             with torch.no_grad():
                 value1, action1, action_log_prob1, states1 = actor_critic1.act(
@@ -313,6 +315,7 @@ def main():
                                                 agent2_rollouts.states[-1],
                                                 agent2_rollouts.masks[-1]).detach()
 
+        #print("GOT HERE")
         agent1_rollouts.compute_returns(next_value1, args.use_gae, args.gamma, args.tau)
         value_loss1, action_loss1, dist_entropy1 = agent1.update(agent1_rollouts)
         agent1_rollouts.after_update()
@@ -320,19 +323,24 @@ def main():
         agent2_rollouts.compute_returns(next_value2, args.use_gae, args.gamma, args.tau)
         value_loss2, action_loss2, dist_entropy2 = agent2.update(agent2_rollouts)
         agent2_rollouts.after_update()
-
+        #print("GOT HERE2")
         
 
         if j % args.save_interval == 0:
+            # print("SAVING")
             torch.save((actor_critic1.state_dict(), results_dict), os.path.join(
                 model_dir, name + 'cifar_model_ppo_ex2_agent1.pt'))
             torch.save((actor_critic2.state_dict(), results_dict), os.path.join(
                 model_dir, name + 'cifar_model_ppo_ex2_agent2.pt'))
+            # print("SAVED")
 
         if j % args.log_interval == 0:
+            # print("EVALUATING EPISODE")
             end = time.time()
             total_reward1 = agent1_eval_episode(eval_env, actor_critic1, args)
             total_reward2 = agent2_eval_episode(eval_env, actor_critic2, args)
+
+            # print("EVALUATED EPISODE")
 
             total_reward = (total_reward1+total_reward2)
             value_loss = (value_loss1+value_loss2)
