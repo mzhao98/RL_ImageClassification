@@ -55,13 +55,13 @@ def main():
     from img_env import ImgEnv, IMG_ENVS
     from model import Policy
     from storage import RolloutStorage
-    from utils import update_current_obs, eval_episode
+    from utils import update_current_obs, agent1_eval_episode, agent2_eval_episode
     from torchvision import transforms
     from visdom import Visdom
 
     import algo
 
-    viz = Visdom(port=8097)
+    # viz = Visdom(port=8097)
 
     print("#######")
     print("WARNING: All rewards are clipped or normalized so you need to use a monitor (see envs.py) or visdom plot to get true rewards")
@@ -158,41 +158,64 @@ def main():
     obs_shape = envs.observation_space.shape
     obs_shape = (obs_shape[0] * args.num_stack, *obs_shape[1:])
 
-    actor_critic = Policy(obs_shape, envs.action_space, args.recurrent_policy,
+    actor_critic1 = Policy(obs_shape, envs.action_space, args.recurrent_policy,
                           dataset=args.env_name, resnet=args.resnet,
                           pretrained=args.pretrained)
+
+    actor_critic2 = Policy(obs_shape, envs.action_space, args.recurrent_policy,
+                          dataset=args.env_name, resnet=args.resnet,
+                          pretrained=args.pretrained)
+
     if envs.action_space.__class__.__name__ == "Discrete":
         action_shape = 1
     else:
         action_shape = envs.action_space.shape[0]
 
     if args.cuda:
-        actor_critic.cuda()
+        actor_critic1.cuda()
+        actor_critic2.cuda()
 
     if args.algo == 'a2c':
-        agent = algo.A2C_ACKTR(actor_critic, args.value_loss_coef,
+        agent1 = algo.A2C_ACKTR(actor_critic1, args.value_loss_coef,
+                               args.entropy_coef, lr=args.lr,
+                               eps=args.eps, alpha=args.alpha,
+                               max_grad_norm=args.max_grad_norm)
+        agent2 = algo.A2C_ACKTR(actor_critic2, args.value_loss_coef,
                                args.entropy_coef, lr=args.lr,
                                eps=args.eps, alpha=args.alpha,
                                max_grad_norm=args.max_grad_norm)
     elif args.algo == 'ppo':
-        agent = algo.PPO(actor_critic, args.clip_param, args.ppo_epoch, args.num_mini_batch,
+        agent1 = algo.PPO(actor_critic1, args.clip_param, args.ppo_epoch, args.num_mini_batch,
+                         args.value_loss_coef, args.entropy_coef, lr=args.lr,
+                               eps=args.eps,
+                               max_grad_norm=args.max_grad_norm)
+        agent2 = algo.PPO(actor_critic2, args.clip_param, args.ppo_epoch, args.num_mini_batch,
                          args.value_loss_coef, args.entropy_coef, lr=args.lr,
                                eps=args.eps,
                                max_grad_norm=args.max_grad_norm)
     elif args.algo == 'acktr':
-        agent = algo.A2C_ACKTR(actor_critic, args.value_loss_coef,
+        agent1 = algo.A2C_ACKTR(actor_critic1, args.value_loss_coef,
+                               args.entropy_coef, acktr=True)
+        agent2 = algo.A2C_ACKTR(actor_critic2, args.value_loss_coef,
                                args.entropy_coef, acktr=True)
 
     action_space = envs.action_space
     if args.env_name in IMG_ENVS:
         action_space = np.zeros(2)
     # obs_shape = envs.observation_space.shape
-    rollouts = RolloutStorage(args.num_steps, args.num_processes, obs_shape, action_space, actor_critic.state_size)
-    current_obs = torch.zeros(args.num_processes, *obs_shape)
+    agent1_rollouts = RolloutStorage(args.num_steps, args.num_processes, obs_shape, action_space, actor_critic1.state_size)
+    agent1_current_obs = torch.zeros(args.num_processes, *obs_shape)
 
-    obs = envs.reset()
-    update_current_obs(obs, current_obs, obs_shape, args.num_stack)
-    rollouts.observations[0].copy_(current_obs)
+    agent1_obs = envs.agent1_reset()
+    update_current_obs(agent1_obs, agent1_current_obs, obs_shape, args.num_stack)
+    agent1_rollouts.observations[0].copy_(agent1_current_obs)
+
+    agent2_rollouts = RolloutStorage(args.num_steps, args.num_processes, obs_shape, action_space, actor_critic2.state_size)
+    agent2_current_obs = torch.zeros(args.num_processes, *obs_shape)
+
+    agent2_obs = envs.agent2_reset()
+    update_current_obs(agent2_obs, agent2_current_obs, obs_shape, args.num_stack)
+    agent2_rollouts.observations[0].copy_(agent2_current_obs)
 
     # These variables are used to compute average rewards for all processes.
     episode_rewards = torch.zeros([args.num_processes, 1])
@@ -204,20 +227,39 @@ def main():
 
     start = time.time()
     for j in range(num_updates):
-        envs.display_original(j)
+        # envs.display_original(j)
         for step in range(args.num_steps):
             # Sample actions
             with torch.no_grad():
-                value, action, action_log_prob, states = actor_critic.act(
-                        rollouts.observations[step],
-                        rollouts.states[step],
-                        rollouts.masks[step])
-            cpu_actions = action.squeeze(1).cpu().numpy()
+                value1, action1, action_log_prob1, states1 = actor_critic1.act(
+                        agent1_rollouts.observations[step],
+                        agent1_rollouts.states[step],
+                        agent1_rollouts.masks[step])
+                value2, action2, action_log_prob2, states2 = actor_critic2.act(
+                        agent2_rollouts.observations[step],
+                        agent2_rollouts.states[step],
+                        agent2_rollouts.masks[step])
+
+            cpu_actions1 = action1.squeeze(1).cpu().numpy()
+            cpu_actions2 = action2.squeeze(1).cpu().numpy()
 
             # Obser reward and next obs
-            obs, reward, done, info = envs.step(cpu_actions)
+            obs1, reward1, done1, info1 = envs.agent1_step(cpu_actions1)
+            obs2, reward2, done2, info2 = envs.agent2_step(cpu_actions2)
 
-            envs.display_step(step, j)
+            # SIMPLE HEURISTIC 1
+            # If either agent gets it correct, they are done.
+    
+            if done1 == True or done2 == True:
+                done1 = True
+                done2 = True
+                done = True
+            else:
+                done = False
+
+
+
+            # envs.display_step(step, j)
 
             # print("OBS", obs)
 
@@ -226,7 +268,9 @@ def main():
             # print("INFO", info)
 
 
-            reward = torch.from_numpy(np.expand_dims(np.stack([reward]), 1)).float()
+            reward1 = torch.from_numpy(np.expand_dims(np.stack([reward1]), 1)).float()
+            reward2 = torch.from_numpy(np.expand_dims(np.stack([reward2]), 1)).float()
+            reward = (reward1+reward2)
             episode_rewards += reward
 
             # If done then clean the history of observations.
@@ -238,13 +282,19 @@ def main():
             if args.cuda:
                 masks = masks.cuda()
 
-            if current_obs.dim() == 4:
-                current_obs *= masks.unsqueeze(2).unsqueeze(2)
+            if agent1_current_obs.dim() == 4:
+                agent1_current_obs *= masks.unsqueeze(2).unsqueeze(2)
+                agent2_current_obs *= masks.unsqueeze(2).unsqueeze(2)
             else:
-                current_obs *= masks
+                agent1_current_obs *= masks
+                agent2_current_obs *= masks
 
-            update_current_obs(obs, current_obs, obs_shape, args.num_stack)
-            rollouts.insert(current_obs, states, action, action_log_prob, value, reward, masks)
+
+            update_current_obs(agent1_obs, agent1_current_obs, obs_shape, args.num_stack)
+            agent1_rollouts.insert(agent1_current_obs, states1, action1, action_log_prob1, value1, reward, masks)
+
+            update_current_obs(agent2_obs, agent2_current_obs, obs_shape, args.num_stack)
+            agent2_rollouts.insert(agent2_current_obs, states2, action2, action_log_prob2, value2, reward, masks)
 
             # print("envs.curr_img SHAPE: ", envs.curr_img.shape)
             #display_state = envs.curr_img
@@ -256,27 +306,38 @@ def main():
             # img.save("state_cifar/"+"state"+str(j)+"_"+str(step)+".png")
 
         with torch.no_grad():
-            next_value = actor_critic.get_value(rollouts.observations[-1],
-                                                rollouts.states[-1],
-                                                rollouts.masks[-1]).detach()
+            next_value1 = actor_critic1.get_value(agent1_rollouts.observations[-1],
+                                                agent1_rollouts.states[-1],
+                                                agent1_rollouts.masks[-1]).detach()
+            next_value2 = actor_critic2.get_value(agent2_rollouts.observations[-1],
+                                                agent2_rollouts.states[-1],
+                                                agent2_rollouts.masks[-1]).detach()
 
-        rollouts.compute_returns(next_value, args.use_gae, args.gamma, args.tau)
+        agent1_rollouts.compute_returns(next_value1, args.use_gae, args.gamma, args.tau)
+        value_loss1, action_loss1, dist_entropy1 = agent1.update(agent1_rollouts)
+        agent1_rollouts.after_update()
 
-        value_loss, action_loss, dist_entropy = agent.update(rollouts)
-
-        rollouts.after_update()
+        agent2_rollouts.compute_returns(next_value2, args.use_gae, args.gamma, args.tau)
+        value_loss2, action_loss2, dist_entropy2 = agent2.update(agent2_rollouts)
+        agent2_rollouts.after_update()
 
         
 
         if j % args.save_interval == 0:
-            torch.save((actor_critic.state_dict(), results_dict), os.path.join(
-                model_dir, name + 'cifar_model2.pt'))
+            torch.save((actor_critic1.state_dict(), results_dict), os.path.join(
+                model_dir, name + 'cifar_model_ppo_ex2_agent1.pt'))
+            torch.save((actor_critic2.state_dict(), results_dict), os.path.join(
+                model_dir, name + 'cifar_model_ppo_ex2_agent2.pt'))
 
         if j % args.log_interval == 0:
             end = time.time()
-            total_reward = eval_episode(eval_env, actor_critic, args)
+            total_reward1 = agent1_eval_episode(eval_env, actor_critic1, args)
+            total_reward2 = agent2_eval_episode(eval_env, actor_critic2, args)
 
-            
+            total_reward = (total_reward1+total_reward2)
+            value_loss = (value_loss1+value_loss2)
+            action_loss = (action_loss1+action_loss2)
+            dist_entropy = (dist_entropy1+dist_entropy2)
 
             results_dict['rewards'].append(total_reward)
             total_num_steps = (j + 1) * args.num_processes * args.num_steps
@@ -286,60 +347,26 @@ def main():
                        np.mean(results_dict['rewards'][-10:]), dist_entropy,
                        value_loss, action_loss))
 
-            # viz.scatter(
-            #     X=(np.linspace(len(results_dict['rewards']),2)),
-            #     Y=results_dict['rewards'],
-            #     opts=dict(
-            #         legend=['Reward'],
-            #         xtickmin=0,
-            #         xtickmax=len(results_dict['rewards']),
-            #         xtickstep=1,
-            #         ytickmin=min(results_dict['rewards']),
-            #         ytickmax=max(results_dict['rewards']),
-            #         ytickstep=0.05,
-            #     ),
-            # )
+
             plot_rewards.append(np.mean(results_dict['rewards'][-10:]))
-            plt.plot(range(len(plot_rewards)), plot_rewards)
-            plt.savefig("rewards.png")
-
             plot_policy_loss.append(action_loss)
-            plt.plot(range(len(plot_policy_loss)), plot_policy_loss)
-            plt.savefig("policyloss.png")
-
             plot_value_loss.append(value_loss)
-            plt.plot(range(len(plot_value_loss)), plot_value_loss)
-            plt.savefig("valueloss.png")
-            # x = range(len(plot_rewards))
-            # y = plot_rewards
-            # viz.update(x, y)
-
-            # viz.line(
-            #     X=np.array([counter + 1]),
-            #     Y=np.array([np.mean(results_dict['rewards'][-10:])]),
-            #     win="test1",
-            #     name='Line1',
-            #     update='append',
-
-            # )
-            # viz.line(
-            #     X=np.array([counter + 1]),
-            #     Y=np.array([value_loss]),
-            #     win="test2",
-            #     name='Line2',
-            #     update='append',
-
-            # )
-            # viz.line(
-            #     X=np.array([counter + 1]),
-            #     Y=np.array([action_loss]),
-            #     win="test3",
-            #     name='Line3',
-            #     update='append',
 
 
-            # )
-            # counter = counter + 1
+    plt.plot(range(len(plot_rewards)), plot_rewards)
+    plt.savefig("rewards_multi_1.png")
+    plt.close()
+
+    
+    plt.plot(range(len(plot_policy_loss)), plot_policy_loss)
+    plt.savefig("policyloss_multi_1.png")
+    plt.close()
+
+    
+    plt.plot(range(len(plot_value_loss)), plot_value_loss)
+    plt.savefig("valueloss_multi_1.png")
+    plt.close()
+
 
 
 if __name__ == "__main__":

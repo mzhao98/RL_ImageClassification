@@ -49,9 +49,9 @@ def update_current_obs(obs, current_obs, obs_shape, num_stack):
     current_obs[:, -shape_dim0:] = obs
 
 
-def eval_episode(env, agent, args):
-    agent.base.eval()
-    obs = env.reset()
+def agent1_eval_episode(env, agent1, args):
+    agent1.base.eval()
+    obs = env.agent1_reset()
     obs_shape = env.observation_space.shape
     obs_shape = (obs_shape[0] * args.num_stack, *obs_shape[1:])
     current_obs = torch.zeros(1, *obs_shape)
@@ -61,14 +61,49 @@ def eval_episode(env, agent, args):
     if args.cuda:
         current_obs = current_obs.cuda()
         states = states.cuda()
-        agent.base.cuda()
+        agent1.base.cuda()
     while not done:
         # state = torch.from_numpy(obs).float().cuda()
         update_current_obs(obs, current_obs, obs_shape, args.num_stack)
-        value, action, action_log_probs, states = agent.act(
+        value1, action1, action_log_probs1, states1 = agent1.act(
              current_obs, states, FloatTensor([[0.0]]),
              deterministic=True)
-        obs, reward, done, _ = env.step(action.detach().cpu().numpy())
+        # value2, action2, action_log_probs2, states2 = agent2.act(
+        #      current_obs, states, FloatTensor([[0.0]]),
+        #      deterministic=True)
+        obs1, reward1, done1, _ = env.agent1_step(action1.detach().cpu().numpy())
+        # obs2, reward2, done2, _ = env.agent2_step(action2.detach().cpu().numpy())
         #print("REWARD", reward)
-        total_reward += reward
+        total_reward += reward1
+    return total_reward
+
+
+
+
+def agent2_eval_episode(env, agent2, args):
+    agent2.base.eval()
+    obs = env.agent1_reset()
+    obs_shape = env.observation_space.shape
+    obs_shape = (obs_shape[0] * args.num_stack, *obs_shape[1:])
+    current_obs = torch.zeros(1, *obs_shape)
+    done = False
+    total_reward = 0
+    states = torch.zeros(1, 512)
+    if args.cuda:
+        current_obs = current_obs.cuda()
+        states = states.cuda()
+        agent2.base.cuda()
+    while not done:
+        # state = torch.from_numpy(obs).float().cuda()
+        update_current_obs(obs, current_obs, obs_shape, args.num_stack)
+        value2, action2, action_log_probs2, states2 = agent2.act(
+             current_obs, states, FloatTensor([[0.0]]),
+             deterministic=True)
+        # value2, action2, action_log_probs2, states2 = agent2.act(
+        #      current_obs, states, FloatTensor([[0.0]]),
+        #      deterministic=True)
+        obs2, reward2, done2, _ = env.agent2_step(action2.detach().cpu().numpy())
+        # obs2, reward2, done2, _ = env.agent2_step(action2.detach().cpu().numpy())
+        #print("REWARD", reward)
+        total_reward += reward1
     return total_reward
